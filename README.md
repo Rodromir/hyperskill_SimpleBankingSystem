@@ -1,6 +1,6 @@
 # hyperskill_SimpleBankingSystem
 
-This system lets user to create a new account and a payment card.
+This system lets user to create a new account / payment card.
 
 Existing users can 
 
