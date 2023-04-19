@@ -1,0 +1,109 @@
+package banking;
+import org.sqlite.SQLiteDataSource;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Scanner;
+
+public class Main {
+    static boolean programRuns = true;
+    static boolean loggedIn = false;
+    static int accNumber;
+    static SQLiteDataSource source;
+
+    public static void main(String[] args) {
+        // db source
+        String filename = args[1];
+        System.out.println(filename);
+        String url = "jdbc:sqlite:" + filename;
+        source = new SQLiteDataSource();
+        source.setUrl(url);
+        try (Connection conn = source.getConnection()) {
+            try (Statement statement = conn.createStatement()) {
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS card(" +
+                        "id INTEGER," +
+                        "number TEXT," +
+                        "pin TEXT," +
+                        "balance INTEGER DEFAULT 0)"
+                );
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+
+            // driver code
+        while (programRuns) {
+            if (!loggedIn) {
+                menuNotLoggedIn();
+            } else {
+                menuLoggedIn();
+            }
+        }
+    }
+
+    public static void menuNotLoggedIn() {
+        System.out.println("1. Create an account");
+        System.out.println("2. Log into account");
+        System.out.println("0. Exit");
+        int selection = new Scanner(System.in).nextInt();
+        processSelection(selection);
+    }
+
+    public static void menuLoggedIn() {
+        System.out.println("1. Balance");
+        System.out.println("2. Add income");
+        System.out.println("3. Do transfer");
+        System.out.println("4. Close account");
+        System.out.println("5. Log out");
+        System.out.println("0. Exit");
+        int selection = new Scanner(System.in).nextInt();
+        processSelection(selection);
+    }
+
+
+    public static void processSelection(int selection) {
+        if (!loggedIn) {
+            switch (selection) {
+                case 1:
+                    new ClientAccount();
+                    break;
+                case 2:
+                    ClientAccount.logIn();
+                    break;
+                case 0:
+                    programRuns = false;
+                    break;
+                default:
+                    System.out.println("Not a valid option.");
+                    break;
+            }
+        } else {
+            switch (selection) {
+                case 1:
+                    System.out.println(ClientAccount.getBalance(accNumber));
+                    break;
+                case 2:
+                    ClientAccount.addIncome(accNumber);
+                    break;
+                case 3:
+                    ClientAccount.transferMoney(accNumber);
+                    break;
+                case 4:
+                    ClientAccount.closeAccount(accNumber);
+                    break;
+                case 5:
+                    loggedIn = false;
+                    accNumber = 0;
+                    System.out.println("You have successfully logged out!");
+                    break;
+                case 0:
+                    programRuns = false;
+                    break;
+            }
+        }
+    }
+}
