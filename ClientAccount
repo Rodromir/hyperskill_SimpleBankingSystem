@@ -1,0 +1,258 @@
+package banking;
+import java.sql.*;
+import java.util.Random;
+import java.util.Scanner;
+
+import static banking.Main.source;
+
+public class ClientAccount {
+    private static final String BIN = "400000";
+    public int accNumber;
+
+    public ClientAccount() {
+        // generating new client's data
+        accNumber = generateAccountNumber();
+        long cardNumber = generateCardNumber(accNumber);
+        int pin = generatePin();
+        int balance = 0;
+        // saving data
+        addToDatabase(
+                accNumber,
+                cardNumber,
+                pin,
+                balance);
+        // printing confirmation
+        System.out.println("Your card has been created");
+        System.out.println("Your card number:");
+        System.out.println(cardNumber);
+        System.out.println("Your card PIN:");
+        System.out.println(pin);
+    }
+
+    private int generateAccountNumber() {
+        StringBuilder accountNumber = new StringBuilder();
+        Random random = new Random();
+        for (int i = 0; i < 9; i++) {
+            accountNumber.append(random.nextInt(9) + 1);
+        }
+        System.out.println("AccNum: " + accountNumber);
+        return Integer.parseInt(accountNumber.toString());
+    }
+
+    private long generateCardNumber(int accountNumber) {
+        StringBuilder cardNumber = new StringBuilder();
+        cardNumber.append(BIN);
+        cardNumber.append(accountNumber);
+        cardNumber.append(addCheckSum(passLuhn(cardNumber)));
+        return Long.parseLong(cardNumber.toString());
+    }
+
+    private int generatePin() {
+        StringBuilder pin = new StringBuilder();
+        Random random = new Random();
+        for (int i = 0; i < 4; i++) {
+            pin.append(random.nextInt(9) + 1);
+        }
+        return Integer.parseInt(pin.toString());
+    }
+
+    private static int passLuhn(StringBuilder cardNumber) {
+        StringBuilder numberSequence = new StringBuilder();
+        //calculating
+        for (int i = 0; i < cardNumber.length(); i++) {
+            int number = Character.getNumericValue(cardNumber.charAt(i));
+            if (i % 2 == 0) {
+                number *= 2;
+                if (number > 9) {
+                    number -= 9;
+                }
+                numberSequence.append(number);
+            } else {
+                numberSequence.append(number);
+            }
+        }
+        // result of addition
+        int sum = 0;
+        for (int i = 0; i < numberSequence.length(); i++) {
+            int number = Character.getNumericValue(numberSequence.charAt(i));
+            sum += number;
+        }
+        System.out.println(sum);
+        return sum;
+    }
+
+    private static int addCheckSum(int sum) {
+        System.out.println(sum);
+        final int TEN = 10;
+        int lastDigit = sum % 10;
+        int checksum = 0;
+        if (lastDigit != 0) {
+            checksum = TEN - lastDigit;
+        }
+        System.out.println("Checksum: " + checksum);
+        return checksum;
+    }
+
+    public static void addToDatabase(int account, long card, int pin, int balance) {
+        try (Connection conn = source.getConnection()) {
+            try (Statement statement = conn.createStatement()) {
+                statement.executeUpdate("INSERT INTO card VALUES " +
+                        "(" + account + ", " + card + ", " + pin + ", " + balance + ")");
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void logIn() {
+        // prompt for credentials
+        System.out.println("Enter your card number:");
+        long cardNumber = new Scanner(System.in).nextLong();
+        System.out.println("Enter your PIN:");
+        int pin = new Scanner(System.in).nextInt();
+        // db query to validate
+        String sql = "SELECT * FROM card WHERE number = ? AND pin = ?";
+        try (Connection con = source.getConnection()) {
+            try (PreparedStatement statement = con.prepareStatement(sql)) {
+                statement.setLong(1, cardNumber);
+                statement.setInt(2, pin);
+                ResultSet result = statement.executeQuery();
+                if (result.next()) {
+                    Main.loggedIn = true;
+                    Main.accNumber = result.getInt(1);
+                    System.out.println("You have successfully logged in!");
+                } else {
+                    System.out.println("Wrong card number or PIN!");
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static int getBalance(int accNumber) {
+        String sql = "SELECT * FROM card WHERE id = ?";
+        int balance = 0;
+        try (Connection con = source.getConnection()) {
+            try (PreparedStatement statement = con.prepareStatement(sql)) {
+                statement.setInt(1, accNumber);
+                ResultSet result = statement.executeQuery();
+                balance = result.getInt(4);
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return balance;
+    }
+
+    public static void addIncome(int accNumber) {
+        System.out.println("Enter income:");
+        int income = new Scanner(System.in).nextInt();
+        String sql = "UPDATE card SET balance = balance + ? WHERE id = ?";
+        try (Connection con = source.getConnection()) {
+            try (PreparedStatement statement = con.prepareStatement(sql)) {
+                statement.setInt(1, income);
+                statement.setInt(2, accNumber);
+                statement.executeUpdate();
+                System.out.println("Income was added!");
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void transferMoney(int accNumber) {
+        System.out.println("Enter card number");
+        long targetCard = new Scanner(System.in).nextLong();
+        StringBuilder targetCardSB = new StringBuilder();
+        targetCardSB.append(targetCard);
+        String sql = "SELECT * FROM card WHERE id = " + accNumber;
+        try (Connection con = source.getConnection()) {
+            try (Statement statement = con.createStatement()) {
+                ResultSet result = statement.executeQuery(sql);
+                long clientCard = result.getLong(2);
+                int clientBalance = result.getInt(4);
+                if (targetCard == clientCard) {
+                    System.out.println("You can't transfer money to the same account!");
+                } else if ((passLuhn(targetCardSB) % 10 != 0)) {
+                    System.out.println("Probably you made a mistake in the card number. Please try again!");
+                } else if (!isInDB(targetCard)) {
+                    System.out.println("Such a card does not exist.");
+                } else {
+                    System.out.println("Enter income");
+                    int amount = new Scanner(System.in).nextInt();
+                    if (clientBalance < amount) {
+                        System.out.println("Not enough money!");
+                    } else {
+                        processTransfer(con, clientCard, targetCard, amount);
+                    }
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    private static boolean isInDB(long cardNumber) {
+        String sql = "SELECT * FROM card WHERE number = " + cardNumber;
+        try (Connection con = source.getConnection()) {
+            try (Statement statement = con.createStatement()) {
+                ResultSet result = statement.executeQuery(sql);
+                if (result.next()) {
+                    return true;
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    private static void processTransfer(Connection con, long clientCard, long targetCard, int amount) {
+        String sql1 = "UPDATE card " +
+                "SET balance = balance - ? " +
+                "WHERE number = ?";
+        String sql2 = "UPDATE card " +
+                "SET balance = balance + ? " +
+                "WHERE number = ?";
+            try (PreparedStatement subtract = con.prepareStatement(sql1);
+                 PreparedStatement add = con.prepareStatement(sql2)) {
+                subtract.setInt(1, amount);
+                subtract.setLong(2, clientCard);
+                subtract.executeUpdate();
+                add.setInt(1, amount);
+                add.setLong(2, targetCard);
+                add.executeUpdate();
+                System.out.println("Success!");
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+    }
+
+    public static void closeAccount(int accNumber) {
+        String sql = "DELETE FROM card WHERE id = " + accNumber;
+        try (Connection con = source.getConnection()) {
+            try (Statement statement = con.createStatement()) {
+                statement.executeUpdate(sql);
+                System.out.println("The account has been closed!");
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
